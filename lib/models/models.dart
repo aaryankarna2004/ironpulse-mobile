@@ -5,3 +5,7 @@ export 'membership_plan.dart';
 export 'gym_class.dart';
 export 'attendance.dart';
 export 'trainer.dart';
+export 'payment_record.dart';
+export 'class_booking.dart';
+export 'active_subscription.dart';
+export 'gym_subscription.dart';

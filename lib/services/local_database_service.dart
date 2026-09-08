@@ -8,7 +8,7 @@ class LocalDatabaseService {
   LocalDatabaseService._();
   static final LocalDatabaseService instance = LocalDatabaseService._();
 
-  // Box names
+  // Box names – all Supabase tables used on Next.js (12 total)
   static const String _usersBox = 'users';
   static const String _gymMembersBox = 'gym_members';
   static const String _gymsBox = 'gyms';
@@ -16,6 +16,11 @@ class LocalDatabaseService {
   static const String _gymClassesBox = 'gym_classes';
   static const String _attendanceBox = 'attendance';
   static const String _trainersBox = 'trainers';
+  static const String _paymentRecordsBox = 'payment_records';
+  static const String _classBookingsBox = 'class_bookings';
+  static const String _activeSubscriptionsBox = 'active_subscriptions';
+  static const String _gymSubscriptionsBox = 'gym_subscriptions';
+  static const String _passwordResetsBox = 'password_resets';
   static const String _metaBox = 'sync_metadata';
 
   bool _initialized = false;
@@ -32,6 +37,11 @@ class LocalDatabaseService {
       Hive.openBox<Map>(_gymClassesBox),
       Hive.openBox<Map>(_attendanceBox),
       Hive.openBox<Map>(_trainersBox),
+      Hive.openBox<Map>(_paymentRecordsBox),
+      Hive.openBox<Map>(_classBookingsBox),
+      Hive.openBox<Map>(_activeSubscriptionsBox),
+      Hive.openBox<Map>(_gymSubscriptionsBox),
+      Hive.openBox<Map>(_passwordResetsBox),
       Hive.openBox(_metaBox),
     ]);
     _initialized = true;
@@ -39,7 +49,7 @@ class LocalDatabaseService {
 
   // ── Sync from Supabase ──────────────────────────────────────────
 
-  /// Fetches all 7 tables from Supabase and stores them in Hive.
+  /// Fetches all Supabase tables used on Next.js (12 tables) and stores them in Hive.
   /// Filters out super_admin users and their related gym_member records.
   /// Returns the number of total records synced.
   Future<int> syncFromSupabase(String gymId) async {
@@ -158,6 +168,82 @@ class LocalDatabaseService {
       totalRecords++;
     }
 
+    // 8. Payment Records – Next.js billing history (filter super_admin members)
+    final paymentQuery = gymId.isNotEmpty
+        ? await supabase.from('payment_records').select().eq('gym_id', gymId)
+        : await supabase.from('payment_records').select();
+    final paymentBox = Hive.box<Map>(_paymentRecordsBox);
+    await paymentBox.clear();
+    for (final row in paymentQuery as List) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final gmId = map['gym_member_id'] as String? ?? '';
+      if (gmId.isNotEmpty && !membersBox.containsKey(gmId)) continue;
+      await paymentBox.put(map['id'] as String, map);
+      totalRecords++;
+    }
+
+    // 9. Class Bookings – Next.js class enrollment
+    final bookingsQuery = gymId.isNotEmpty
+        ? await supabase.from('class_bookings').select().eq('gym_id', gymId)
+        : await supabase.from('class_bookings').select();
+    final bookingsBox = Hive.box<Map>(_classBookingsBox);
+    await bookingsBox.clear();
+    for (final row in bookingsQuery as List) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final gmId = map['gym_member_id'] as String? ?? '';
+      if (gmId.isNotEmpty && !membersBox.containsKey(gmId)) continue;
+      await bookingsBox.put(map['id'] as String, map);
+      totalRecords++;
+    }
+
+    // 10. Active Subscriptions – Next.js member plan status
+    final activeSubsQuery = gymId.isNotEmpty
+        // active_subscriptions has no gym_id; filter via linked gym_member if needed by fetching all then filtering
+        ? await supabase.from('active_subscriptions').select()
+        : await supabase.from('active_subscriptions').select();
+    final activeSubsBox = Hive.box<Map>(_activeSubscriptionsBox);
+    await activeSubsBox.clear();
+    for (final row in activeSubsQuery as List) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final gmId = map['gym_member_id'] as String? ?? '';
+      if (gmId.isNotEmpty && !membersBox.containsKey(gmId)) continue;
+      if (gymId.isNotEmpty) {
+        // Keep only subs whose member belongs to this gym (membersBox already filtered by gymId)
+        if (gmId.isNotEmpty && !membersBox.containsKey(gmId)) continue;
+      }
+      await activeSubsBox.put(map['id'] as String, map);
+      totalRecords++;
+    }
+
+    // 11. Gym Subscriptions – org-level billing (no member link, filter by gym_id if column exists)
+    try {
+      final gymSubsQuery = gymId.isNotEmpty
+          ? await supabase.from('gym_subscriptions').select().eq('gym_id', gymId)
+          : await supabase.from('gym_subscriptions').select();
+      final gymSubsBox = Hive.box<Map>(_gymSubscriptionsBox);
+      await gymSubsBox.clear();
+      for (final row in gymSubsQuery as List) {
+        final map = Map<String, dynamic>.from(row as Map);
+        await gymSubsBox.put(map['id'] as String? ?? '${gymSubsBox.length}', map);
+        totalRecords++;
+      }
+    } catch (_) {
+      // Table may be empty or RLS restricted – ensure box cleared
+      await Hive.box<Map>(_gymSubscriptionsBox).clear();
+    }
+
+    // 12. Password Resets – exclude super_admin users' tokens
+    final resetsQuery = await supabase.from('password_resets').select();
+    final resetsBox = Hive.box<Map>(_passwordResetsBox);
+    await resetsBox.clear();
+    for (final row in resetsQuery as List) {
+      final map = Map<String, dynamic>.from(row as Map);
+      final uid = map['user_id'] as String? ?? '';
+      if (uid.isNotEmpty && !nonSuperAdminUserIds.contains(uid)) continue;
+      await resetsBox.put(map['id'] as String, map);
+      totalRecords++;
+    }
+
     // Update last sync timestamp
     final metaBox = Hive.box(_metaBox);
     await metaBox.put('last_sync', DateTime.now().toIso8601String());
@@ -228,6 +314,47 @@ class LocalDatabaseService {
         .toList();
   }
 
+  List<PaymentRecord> getPaymentRecords() {
+    final box = Hive.box<Map>(_paymentRecordsBox);
+    return box.values
+        .map((m) => PaymentRecord.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  List<ClassBooking> getClassBookings() {
+    final box = Hive.box<Map>(_classBookingsBox);
+    return box.values
+        .map((m) => ClassBooking.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  List<ActiveSubscription> getActiveSubscriptions() {
+    final box = Hive.box<Map>(_activeSubscriptionsBox);
+    return box.values
+        .map((m) => ActiveSubscription.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  List<GymSubscription> getGymSubscriptions() {
+    final box = Hive.box<Map>(_gymSubscriptionsBox);
+    return box.values
+        .map((m) => GymSubscription.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
+  }
+
+  List<Map<String, dynamic>> getPasswordResets() {
+    final box = Hive.box<Map>(_passwordResetsBox);
+    return box.values.map((m) => Map<String, dynamic>.from(m)).toList();
+  }
+
+  // Raw access for any Next.js data parity
+  List<Map<String, dynamic>> getPaymentRecordsRaw() =>
+      Hive.box<Map>(_paymentRecordsBox).values.map((m) => Map<String, dynamic>.from(m)).toList();
+  List<Map<String, dynamic>> getClassBookingsRaw() =>
+      Hive.box<Map>(_classBookingsBox).values.map((m) => Map<String, dynamic>.from(m)).toList();
+  List<Map<String, dynamic>> getActiveSubscriptionsRaw() =>
+      Hive.box<Map>(_activeSubscriptionsBox).values.map((m) => Map<String, dynamic>.from(m)).toList();
+
   // ── Cache Status ────────────────────────────────────────────────
 
   /// Returns the last sync timestamp, or null if never synced.
@@ -247,7 +374,10 @@ class LocalDatabaseService {
   /// Returns true if cached data exists.
   bool get hasCachedData {
     return Hive.box<Map>(_usersBox).isNotEmpty ||
-        Hive.box<Map>(_gymMembersBox).isNotEmpty;
+        Hive.box<Map>(_gymMembersBox).isNotEmpty ||
+        Hive.box<Map>(_paymentRecordsBox).isNotEmpty ||
+        Hive.box<Map>(_classBookingsBox).isNotEmpty ||
+        Hive.box<Map>(_activeSubscriptionsBox).isNotEmpty;
   }
 
   /// Returns true if last sync was more than [minutes] minutes ago.
@@ -269,6 +399,11 @@ class LocalDatabaseService {
       Hive.box<Map>(_gymClassesBox).clear(),
       Hive.box<Map>(_attendanceBox).clear(),
       Hive.box<Map>(_trainersBox).clear(),
+      Hive.box<Map>(_paymentRecordsBox).clear(),
+      Hive.box<Map>(_classBookingsBox).clear(),
+      Hive.box<Map>(_activeSubscriptionsBox).clear(),
+      Hive.box<Map>(_gymSubscriptionsBox).clear(),
+      Hive.box<Map>(_passwordResetsBox).clear(),
       Hive.box(_metaBox).clear(),
     ]);
   }

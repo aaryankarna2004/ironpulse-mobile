@@ -3,7 +3,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:ironpulse/models/models.dart';
 import 'package:ironpulse/screens/auth/login_screen.dart';
 import 'package:ironpulse/services/local_database_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 class AdminHomeScreen extends StatefulWidget {
   final GymMember? gymMember;
@@ -18,7 +17,6 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  final _supabase = Supabase.instance.client;
   final _localDb = LocalDatabaseService.instance;
 
   Gym? _gym;
@@ -385,7 +383,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _members.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (context, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final m = _members[index];
                           final memberUser = m.user;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:ironpulse/models/models.dart';
 import 'package:ironpulse/screens/admin/admin_home_screen.dart';
@@ -11,11 +12,20 @@ final supabase = Supabase.instance.client;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Edge-to-edge dark Volt theme for Android/iOS status & nav bars
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFF111316),
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await Supabase.initialize(
     url: 'https://qtwacvzlaprhtuuehfsu.supabase.co',
     publishableKey: 'sb_publishable_bCjvGYMc7wYq1gK2Y03-Dg_o5c_csXE',
   );
-  // Initialize Hive local cache
+  // Initialize Hive local cache (Hive.initFlutter uses path_provider – works on Android/iOS/Web)
   await LocalDatabaseService.instance.init();
   runApp(const MyApp());
 }
@@ -26,17 +36,23 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ironpulse',
+      title: 'Iron Pulse',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0F172A),
+        scaffoldBackgroundColor: const Color(0xFF111316),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFFF6B00),
-          secondary: Color(0xFFFF8533),
-          surface: Color(0xFF1E293B),
+          primary: Color(0xFFC3F400),
+          secondary: Color(0xFF00DBE9),
+          surface: Color(0xFF1E2023),
+          onSurface: Color(0xFFE2E2E6),
         ),
         useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF111316),
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: Color(0xFFE2E2E6),
+        ),
       ),
       routes: {
         '/login': (_) => const LoginScreen(),
@@ -129,30 +145,39 @@ class _SplashRouterState extends State<SplashRouter> {
 
   @override
   Widget build(BuildContext context) {
-    // Brief splash while checking session
+    // Brief Iron Pulse splash while checking session (Android/iOS launch parity)
     return const Scaffold(
-      backgroundColor: Color(0xFF0F172A),
+      backgroundColor: Color(0xFF111316),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.fitness_center_rounded,
+              Icons.bolt_rounded,
               size: 56,
-              color: Color(0xFFFF6B00),
+              color: Color(0xFFC3F400),
             ),
             SizedBox(height: 16),
             Text(
-              'IRONPULSE',
+              'IRON',
               style: TextStyle(
-                color: Colors.white,
+                color: Color(0xFFE2E2E6),
                 fontSize: 24,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 letterSpacing: 2,
               ),
             ),
+            Text(
+              'PULSE',
+              style: TextStyle(
+                color: Color(0xFFC3F400),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 3,
+              ),
+            ),
             SizedBox(height: 24),
-            CircularProgressIndicator(color: Color(0xFFFF6B00)),
+            CircularProgressIndicator(color: Color(0xFFC3F400), strokeWidth: 2.5),
           ],
         ),
       ),

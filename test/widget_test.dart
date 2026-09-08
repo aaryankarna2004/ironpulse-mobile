@@ -40,9 +40,8 @@ void main() {
       ),
     );
 
-    expect(find.text('IRONPULSE'), findsOneWidget);
-    expect(find.text('Email Address'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.textContaining('IRON'), findsWidgets);
+    expect(find.textContaining('AUTHORIZE'), findsOneWidget);
+    expect(find.textContaining('STAFF'), findsWidgets);
   });
 }

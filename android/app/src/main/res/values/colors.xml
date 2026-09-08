@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Volt Management / Iron Pulse palette -->
+    <color name="volt_background">#111316</color>
+    <color name="volt_surface">#1E2023</color>
+    <color name="volt_primary">#C3F400</color>
+    <color name="volt_on_surface">#E2E2E6</color>
+</resources>
